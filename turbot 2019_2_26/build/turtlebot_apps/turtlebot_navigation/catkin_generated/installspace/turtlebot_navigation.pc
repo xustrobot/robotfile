@@ -1,0 +1,8 @@
+prefix=/home/nvidia/turbot/install
+
+Name: turtlebot_navigation
+Description: Description of turtlebot_navigation
+Version: 2.3.7
+Cflags: 
+Libs: -L/home/nvidia/turbot/install/lib 
+Requires: tf roscpp sensor_msgs

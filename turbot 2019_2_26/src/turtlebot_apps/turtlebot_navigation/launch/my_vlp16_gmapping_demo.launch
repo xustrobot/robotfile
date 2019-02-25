@@ -1,0 +1,41 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+
+  <!-- Define laser type-->
+  <arg name="laser_type" default="vlp16" />
+
+
+  <include file="$(find turtlebot_bringup)/launch/minimal_vlp16.launch" />
+
+    <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch">
+  <arg name="calibration" default="/home/nvidia/Public/VLP-16.yaml"/>
+ </include>
+
+  <!-- laser driver -->
+  <!--include file="$(find turtlebot_navigation)/laser/driver/$(arg laser_type)_laser.launch" /-->
+
+  <!-- Gmapping -->
+  <arg name="custom_gmapping_launch_file" default="$(find turtlebot_navigation)/launch/includes/gmapping/$(arg laser_type)_gmapping.launch.xml"/>
+  <include file="$(arg custom_gmapping_launch_file)"/>
+
+  <!-- Move base -->
+  <!--include file="$(find turtlebot_navigation)/launch/includes/move_base.launch.xml"/-->
+
+
+  <include file="$(find turtlebot_navigation)/launch/amcl/vlp16_amcl.launch" />
+  <node pkg="frontier_exploration" type="explore_client" name="explore_client" output="screen"/>
+
+  <node pkg="frontier_exploration" type="explore_server" name="explore_server" output="screen">
+
+    <param name="frequency" value="1.0"/>
+
+    <!-- Should be less than sensor range -->
+    <param name="goal_aliasing" value="2.0"/>
+    
+    <rosparam file="$(find turtlebot_navigation)/param/costmap_common_params.yaml" command="load" ns="explore_costmap" />
+    <rosparam file="$(find turtlebot_navigation)/param/config/odom/costmap_exploration.yaml" command="load" ns="explore_costmap" />
+
+  </node>
+
+
+</launch>

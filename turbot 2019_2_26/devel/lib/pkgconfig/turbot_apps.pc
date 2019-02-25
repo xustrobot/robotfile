@@ -1,0 +1,8 @@
+prefix=/home/nvidia/turbot/devel
+
+Name: turbot_apps
+Description: Description of turbot_apps
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/nvidia/turbot/devel/lib 
+Requires: 

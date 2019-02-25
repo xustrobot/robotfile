@@ -1,0 +1,8 @@
+prefix=/home/nvidia/turbot/install
+
+Name: turbot_teleop
+Description: Description of turbot_teleop
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/nvidia/turbot/install/lib 
+Requires: 

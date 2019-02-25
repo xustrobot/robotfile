@@ -1,0 +1,121 @@
+├── CMakeLists.txt
+├── env-hooks                                                          #钩子
+│   └── 25.turtlebot-navigation.sh.em                                  #设置一些稳定的默认值，目前是导出TURTLEBOT_MAP_FILE，使用默认的地图。
+├── laser                                                              #雷达相关设置
+│   ├── costmap_common_params.yaml                                     #costmap的通用参数
+│   ├── laser_amcl_demo.launch                                         #激光amcl启动文件
+│   ├── laser_gmapping_demo.launch                                     #激光gmapping启动文件
+│   └── move_base_laser.launch                                         #带激光底盘移动启动文件
+├── launch                                                             #启动目录
+│   ├── amcl_demo.launch                                               #amcl启动文件     
+│   ├── gmapping_demo.launch                                           #gmapping启动文件
+│   ├── graveyard
+│   │   └── graveyard_bump_navi_demo.launch                            #
+│   └── includes                                                       #启动文件的子模块
+│       ├── amcl                                                       #即时定位
+│       │   ├── amcl.launch.xml                                        #即时定位核心启动文件
+│       │   ├── astra_amcl.launch.xml -&gt; amcl.launch.xml               #使用astra进行定位
+│       │   ├── asus_xtion_pro_amcl.launch.xml -&gt; amcl.launch.xml      #使用asus_xtion_pro进行定位
+│       │   ├── asus_xtion_pro_offset_amcl.launch.xml -&gt; amcl.launch.xml #使用asus_xtion_pro_live进行定位
+│       │   ├── kinect_amcl.launch.xml -&gt; amcl.launch.xml                #使用kinect进行定位
+│       │   └── r200_amcl.launch.xml                                     #使用r200进行定位
+│       ├── gmapping                                                             #实时建图
+│       │   ├── astra_gmapping.launch.xml -&gt; gmapping.launch.xml                 #使用astra建图 
+│       │   ├── asus_xtion_pro_gmapping.launch.xml -&gt; gmapping.launch.xml        #使用asus_xtion_pro建图
+│       │   ├── asus_xtion_pro_offset_gmapping.launch.xml -&gt; gmapping.launch.xml #使用asus_xtion_pro_live建图
+│       │   ├── gmapping.launch.xml                                              #实际建图核心启动文件
+│       │   ├── kinect_gmapping.launch.xml -&gt; gmapping.launch.xml                #使用kinect建图 
+│       │   └── r200_gmapping.launch.xml                                         #使用r200建图
+│       ├── move_base.launch.xml                                                 #底盘移动启动文件
+│       ├── safety_controller.launch.xml                                         #安全控制启动文件
+│       └── velocity_smoother.launch.xml                                         #速度平滑启动文件
+├── maps                                                                         #地图目录
+│   ├── willow-2010-02-18-0.10.pgm
+│   └── willow-2010-02-18-0.10.yaml
+├── package.xml
+├── param                                                                        #参数目录
+│   ├── astra_costmap_params.yaml -&gt; dummy.yaml                                  #astra的costmap参数定义,指向空文件
+│   ├── asus_xtion_pro_costmap_params.yaml -&gt; dummy.yaml                         #asus_xtion_pro的costmap参数定义,指向空文件
+│   ├── asus_xtion_pro_offset_costmap_params.yaml -&gt; dummy.yaml                  #asus_xtion_pro_live的costmap参数定义,指向空文件
+│   ├── costmap_common_params.yaml                                               #通用的costmap参数定义
+│   ├── dummy.yaml                                                               #空文件,没有自定义的参数设置
+│   ├── dwa_local_planner_params.yaml                                            #dwa本地规划参数定义
+│   ├── global_costmap_params.yaml                                               #全局costmap参数定义
+│   ├── global_planner_params.yaml                                               #全局规划参数定义
+│   ├── kinect_costmap_params.yaml -&gt; dummy.yaml                                 #kinect的costmap参数定义,指向空文件
+│   ├── local_costmap_params.yaml                                                #本地的costmap参数定义
+│   ├── move_base_params.yaml                                                    #底盘移动参数定义
+│   ├── navfn_global_planner_params.yaml                                         #navfn全局规划参数定义
+│   └── r200_costmap_params.yaml                                                 #r200的costmap参数定义
+└── src                                                                          #源码目录
+    └── laser_footprint_filter.cpp                                               #激光过滤footprint源码, 订阅/scan话题,过滤后,重发布/scan_filtered话题
+	
+	要知识点：
+
+param/global_planner_params.yaml
+
+全局规划参数设置
+http://wiki.ros.org/global_planner
+dijkstra算法(默认)，A*算法
+param/dwa_local_planner_params.yaml
+
+针对本地规划的算法实现的参数设置
+DWAPlannerROS
+translational velocities 平移速度
+rotational velocity 旋转速度
+dwa DWA算法包
+参考：
+http://blog.csdn.net/x_r_su/article/details/53393872
+http://blog.csdn.net/u013158492/article/details/50512900
+http://blog.csdn.net/eaibot/article/details/51674133
+http://wiki.ros.org/base_local_planner
+http://wiki.ros.org/dwa_local_planner
+http://wiki.ros.org/navigation
+param/navfn_global_planner_params.yaml
+
+针对全局规划的算法实现参数设置
+navfn通过Dijkstra最优路径的算法,计算costmap上的最小花费路径,作为机器人的全局路线
+参考：
+http://wiki.ros.org/navfn
+http://blog.csdn.net/x_r_su/article/details/53407105
+param/costmap_common_params.yaml
+
+costmap的通用参数设置, costmap(我这里翻译为估测地图,容易理解,也有中文资料翻译为代价地图)
+robot_radius: 0.20 # 距离圆形机器人应清除障碍物 (kobuki: 0.18)
+track_unknown_space: true #为true时需要禁止全局路径规划来通过未知空间
+http://wiki.ros.org/costmap_2d
+voxel 三维像素
+cost_scaling_factor: 5.0 # 估算到障碍时逐步降低的指数速率(default: 10)
+inflation_radius: 0.5 # 障碍(路径规划估算的)的最大距离，也可称为膨胀区.
+launch/gmapping_demo.launch
+
+启动3D sensor，深度相机，根据参数设置，指定深度相机
+启动Gmapping，即时建图，根据参数设置，指定对应深度相机的Gmapping文件
+启动Move base,底盘移动
+launch/amcl_demo.launch
+
+启动3D sensor，深度相机，根据参数设置，指定深度相机
+启动Map server，地图服务器,根据参数设置，指定地图
+启动AMCL，定位和导航，根据参数设置，指定对应深度相机的AMCL文件
+启动Move base,底盘移动，根据参数设置，指定对应的配置文件
+graveyard/graveyard_bump_navi_demo.launch
+
+随走导航演示: 尝试使用navi包结合保险杆和悬崖传感器
+launch/include/move_base.launch.xml
+
+move_base包
+参考：
+http://wiki.ros.org/move_base
+velocity_smoother.launch.xml 速度平滑， 使用yocs_velocity_smoother/VelocitySmootherNodelet
+safety_controller.launch.xml 安全控制， 使用kobuki_safety_controller/SafetyControllerNodelet
+includes/amcl/amcl.launch.xml
+
+amcl包, 定位和导航
+参考：
+http://wiki.ros.org/amcl
+launch/includes/gmapping/gmapping.launch.xml
+
+gmapping包, 地图构建
+参考：
+http://wiki.ros.org/gmapping
+使用slam_gmapping算法实现

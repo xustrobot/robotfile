@@ -1,0 +1,4 @@
+#!/bin/bash
+
+roslaunch turbot_tools test_rplidar.launch
+

@@ -1,0 +1,2 @@
+turbot/turbot:turbot/turbot_apps:turbot/turbot_arm:turbot/turbot_bringup:turbot/turbot_cali:turbot/turbot_code:turbot/turbot_map:turbot/turbot_rviz:turbot/turbot_slam:turbot/turbot_teleop:turbot/turbot_tools:turtlebot_apps/turtlebot_actions:turtlebot_apps/turtlebot_apps:turtlebot_apps/turtlebot_calibration:turtlebot_apps/turtlebot_follower:turtlebot_apps/turtlebot_navigation:turtlebot_apps/turtlebot_rapps
+-DCATKIN_DEVEL_PREFIX=/home/nvidia/turbot/devel -DCMAKE_INSTALL_PREFIX=/home/nvidia/turbot/install -G Unix Makefiles
