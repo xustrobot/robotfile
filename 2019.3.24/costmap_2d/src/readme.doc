@@ -1,0 +1,321 @@
+﻿0 概述
+
+该软件包订阅现实世界的传感器数据，实现2d栅格costmap。该软件包还支持基于map_server的costmap初始化，基于滚动窗口的costmaps，以及基于参数的订阅和传感器主题的配置。
+0.1 层次
+
+分为三层：staticlayer，obstaclelayer，inflationlayer。
+0.2 基础cost值
+
+每个单元分为三个状态。
+Occupied（costmap_2d::LETHAL_OBSTACLE=254）
+Free （ costmap_2d::FREE_SPACE=0）
+Unknown Space（costmap_2d::NO_INFORMATION=255）
+0.3 inflation
+
+从障碍向外膨胀时，cost值随距离增加而降低。
+inflation
+
+为此，我们为costmap值定义5个特定符号，因为它们与机器人相关。（可以利用机器人中心所在的单元格值，判断处于什么碰撞状态）
+"Lethal"（254）
+机器人中心大于等于此值，机器人肯定撞
+"Inscribed"（253）
+机器人中心大于等于此值，机器人肯定撞
+"Possibly circumscribed"（128）
+如果机器人中心位于该值或高于该值的单元中，则它取决于机器人的方向是否与障碍物碰撞。
+"Freespace"（0）
+0-128时，都不撞
+"Unknown" 代表该栅格没有信息。
+0.4 地图类型
+
+全局-mapserver提供
+局部-跟着机器人几何中心走
+update_frequency 地图更新周期。每个周期接受sensor数据，按照0.2中的基础cost值更新障碍信息cost，并按照0.3中的数值inflation。
+publish_frequency 发布地图频率
+0.5 主题
+
+发布
+~< name >/footprint (geometry_msgs/Polygon)
+订阅
+〜< name > / costmap（nav_msgs / OccupancyGrid）
+costmap中的值
+〜< name> / costmap_updates（map_msgs / OccupancyGridUpdate）
+costmap的更新区域的值
+〜< name> / voxel_grid（costmap_2d / VoxelGrid）
+当基础占用网格使用体素，并且用户请求发布体素网格时，可选择发布。
+
+===========================================================================================================================
+1 源码阅读
+
+类图
+
+layer基类是一个虚基类，定义了两个重要接口：
+updateBounds、updateCosts。顾名思义，一个更新范围，一个更新cost。
+costmap2D基类主要换算坐标等等，负责打杂。里面定义了costmap的存储：unsigned char* costmap_。是一个unsigned char数组。
+costmapLayer类定义了几种更新地图的方法。
+costmap2dROS 封装了整个功能，对外提供了简洁的接口。
+可以采用topdown方式读代码，先读最外层。然后读核心功能。
+
+=======================================
+1.0 用数据描述花费地图
+
+看代码的过程中，如果对描述地图的数据不清楚，那么从基类往外看会越来越迷糊，此小节来整理一下描述花费地图的数据。
+在costmap2d基类中：
+地图尺寸：size_x_，size_y_，resolution_，
+地图原点：origin_x_，origin_y_，
+地图实体：unsigned char* costmap_，default_value_
+
+layer基类中：
+聚合layer的功能：LayeredCostmap* layered_costmap_
+此layer是否被使能，是否当前：bool enabled_，current
+layer名：std::string name_，
+小车：std::vector< geometry_msgs::Point> footprint_spec_，
+
+costmaplayer类：
+额外边界（？？？）：extra_min_x_, extra_max_x_, extra_min_y_, extra_max_y_
+
+staticlayer类：
+坐标系：global_frame_，map_frame_
+地图位置和尺寸：x_, y_（0）, width_, height_
+订阅地图更新：map_sub_, map_update_sub_
+
+obstaclelayer类：
+更新方式选择：combination_method_
+传感器数据订阅者：observation_subscribers_
+保证变换可行：observation_notifiers_
+观测数据：observation_buffers_
+标记障碍的观测数据：marking_buffers_
+用于清除小车与障碍间cost的观测数据：clearing_buffers_
+
+inflation_layer类
+
+layered_costmap基类
+地图 : Costmap2D costmap_;
+全局坐标系：global_frame_
+是否移动：rolling_window_，
+地图界限：minx_, miny_, maxx_, maxy_，
+bounds： bx0_, bxn_, by0_, byn_
+机器人参数：circumscribed_radius_, inscribed_radius_
+插件（即各个layer）：std::vector<boost::shared_ptr > plugins_
+
+Costmap2DROS类
+名字：cosmap名称
+tf：坐标变换。
+负责聚合layer的包工头：LayeredCostmap* layered_costmap_
+坐标系：global_frame_，robot_base_frame_
+1.1 Costmap2DROS类
+
+通过读这个类的重要的接口，我们发现Costmap2DROS主要是调用LayeredCostmap类干活。因此，我们可以看具体调用了LayeredCostmap的哪些功能，为下一步分析铺垫。
+重要接口：
+Costmap2DROS（）构造函数
+
+检查是否存在robot base frame到 global的变换;创建一个LayeredCostmap类型的layered_costmap_;订阅与发布footprint主题，并更新机器人footprint;创建costmap2D发布者，发布地图。
+start()函数
+
+调用layered_costmap_，并激活每层。
+stop()函数
+
+调用layered_costmap_，并停止每层。
+resetLayers()函数
+
+调用layered_costmap_，并reset每层。
+updateMap()函数
+
+调用layered_costmap_->updateMap(x, y, yaw)以机器人所在中心更新地图，并发布footprint。
+1.2 LayeredCostmap基类
+
+此类调用了costmap2d类、各层layer的功能。
+LayeredCostmap(std::string global_frame, bool rolling_window, bool track_unknown)构造函数
+
+初始化坐标系、滚动窗、坐标范围
+addPlugin（）函数
+
+添加让多个layer层入栈。
+updateMap（）函数
+
+调用costmap2d类的功能：costmap_.updateOrigin(new_origin_x, new_origin_y)更新地图原点（当为rollingwindow时）;
+调用layer：(*plugin)->updateBounds，更新每层范围。
+调用costmap_.resetMap（）
+调用(*plugin)->updateCosts更新花费
+resizeMap（）函数
+
+调用costmap2d类的功能：costmap_.resizeMap，重置地图大小、分辨率。
+调用(*plugin)->matchSize()，使每层尺寸匹配。
+getUpdatedBounds()函数
+
+得到地图和layer的界限。左下角和右上角。
+设置了circumscribed_radius_, inscribed_radius_
+
+========================================================
+1.3 layer虚基类
+
+定义的接口：
+layer（）构造函数
+
+需要注意初始化了一个LayeredCostmap对象，以及一个tf
+updateBounds（）虚函数
+updateCosts（）虚函数
+activate（）虚函数
+deactivate（）虚函数
+reset（）虚函数
+
+=========================================================
+1.4 costmap2D基类
+
+主要负责坐标转换，保存costmap等。各种打杂，稍后看。
+updateOrigin（）函数
+
+当移动地图的原点时，不仅仅重新设置原点，还将两地图重合的部分，重新复制到新地图中应该在的地方去。其他未知的区域cost暂时设置为default。如下图所示。
+在这里插入图片描述
+
+===============================================================
+1.5 CostmapLayer类
+
+同时继承了layer和costmap2D类。主要定以了几种更新cost的方法。
+
+protected：
+updateWithTrueOverwrite（）函数
+
+master[it] = costmap_[it]，将costmap的值复制到mastergrid中。
+updateWithOverwrite（）函数
+
+根上个函数代码一模一样，很神奇
+updateWithAddition（）函数
+
+master_array[it] = sum，以costmap的值加上master_array本身的值的和更新master_array。（大于254则254）
+updateWithMax（）函数
+
+当master_array[it]小于costmap_[it];master_array[it] = costmap_[it];用最大的更新master_array.
+
+============================================================
+1.6 StaticLayer类
+
+用于处理事先建立好的静态地图。
+onInitialize()函数
+
+从ros参数服务器获取参数，
+订阅map主题，调用incomingMap（）函数。
+订阅map_updates主题，调用incomingUpdate（）函数。
+incomingMap（）函数
+
+根据收到的map信息，调用layered_costmap_->resizeMap（）调整layer尺寸。
+然后调用下述语句，将收到的new_map的数据赋值到costmap_中：
+unsigned char value = new_map->data[index];
+costmap_[index] = interpretValue(value);
+incomingUpdate（）函数
+
+当地图更新时，调用
+costmap_[index] = interpretValue(update->data[di++]);更新花费。
+updateBounds（）函数
+
+更新最大最小范围。
+updateCosts（）函数
+
+如果isrolling为假，则调用 ：
+updateWithTrueOverwrite或者updateWithMax更新地图。
+如果isrolling为真：
+将global的点的cost复制到master_grid的map坐标系下对应点的cost中。
+
+=========================================================
+1.7 ObstacleLayer类(会用到1.8，1.9存储观测信息)
+onInitialize()
+
+读取ros参数服务器中的参数;
+创建一个observation_buffers_，是一个vecotr，里面存储三个ObservationBuffer类型数据。实现为三类来源（LaserScan、PointCloud、PointCloud2）的存储初始化。以后数据就存储在这里啦。
+要往observation_buffers_存储数据，用到了下面两个类，监听数据来源，并完成数据转换和存储：
+1、分别建立三种类型数据的message_filters::Subscriber。
+2、分别建立三种类型数据的tf2_ros::MessageFilter，并注册回调函数，回调函数负责数据转换和存储。
+laserScanCallback（）回调函数
+
+以sensor_msgs::LaserScan类型消息为输入，将laserscan数据转换为sensor_msgs::PointCloud2类型数据，并调用ObservationBuffer类的bufferCloud(cloud)方法，将该消息存储到一个链表（也就是ObservationBuffer类中的成员）中。
+laserScanValidInfCallback（）回调函数
+
+同上一个函数功能相同。但前面增加了一个步骤，滤去了inf无穷大数据。
+pointCloudCallback（）回调函数
+
+以PointCloud类型数据为输入，将该数据转换为ensor_msgs::PointCloud2类型数据并存储。
+pointCloud2Callback（）回调函数
+
+不需要转换直接进行存储。
+updateBounds（）函数
+
+更新origin，更新界（minx，miny，maxx，maxy）。
+根据障碍所在坐标将costmap中对应栅格cost设为LETHAL_OBSTACLE。
+并且更新footprint。
+updateCosts（）函数
+
+根据选择的方式combination_method_：
+调用updateWithOverwrite（）或者updateWithMax()将本层的costmap写入到master_grid中。
+getMarkingObservations（）函数
+
+将marking_buffers_中的三个来源的点云格式数据，全部压栈到std::vector< Observation>中。
+getClearingObservations（）函数
+
+将clearing_buffers_中的三个来源的点云格式数据，全部压栈到std::vector< Observation>中。
+raytraceFreespace（）函数
+
+将clearing_observation中的点云数据不再地图中的投影到地图边界，并将该点云数据到传感系坐标原点连线的路径全部标记为freespace。
+activate()函数
+
+开始订阅传感器数据，并重置更新时间（ObservationBuffer类的更新时间，代表了里面数据是否新鲜）。
+deactivate()函数
+
+关闭订阅数据。
+reset()函数
+
+重新active一下。
+
+===============================================================
+1.8 Observation类
+
+存储点云数据，只有构造函数，没有其他函数。
+重要的数据类型：
+sensor_msgs::PointCloud2* cloud_ 储存点云数组
+obstacle_range_，raytrace_range_
+1.9 ObservationBuffer类
+
+std::list < Observation> observation_list_ 保存点云数据
+setGlobalFrame（）函数
+
+设置observation buffer的全局坐标系。遍历observation_list_中的每个Observation类型的数据，将其转换到new global frame中。
+bufferCloud（）函数
+
+将观测到的sensor_msgs::PointCloud2& cloud数据转换到全局坐标系globalframe中，并保存到observation_list_链表中。（包括观察原点和点云数据的转换，其他附加信息直接复制（如点云尺寸，时间戳））
+purgeStaleObservations（）函数
+
+清除陈旧的观测数据。
+对observation_list_里面存储的数据的时间戳判断，清除过旧的数据。
+getObservations（）函数
+
+将observation_list_链表中的数据复制到一个vector< Observation >中。
+
+===============================================
+inflation_layer类
+InflationLayer()构造函数
+
+除了成员初始化外，新建了一个递归互斥体inflation_access_
+onInitialize()函数
+
+锁住互斥体，动态重配一些参数。
+computeCost（）函数
+
+输入为到障碍物的栅格距离，输出为cost，函数为e的-x次方形式。
+computeCaches()函数
+
+计算了两张正方形表cached_costs_，cached_distances_
+cached_distances_存的是，cached_distances_(i,j)到cached_distances_（0,0）的距离。cached_distances_存的是对应的cost。 通过computeCost（）计算。
+matchSize()函数
+
+根据master的尺寸，计算自己的seen_size_=size_x * size_y，和seen_（seen_size_长度的bool数组。）并computeCaches()。
+enqueue（）函数
+
+输入为index，目标点，源点。
+如果没有访问该目标点，则计算到源点距离，并将该点放到std::map<double, std::vector< CellData> > inflation_cells_;中。
+这样就建立了一个距离与一系列点的映射。
+updateBounds（）函数
+
+最小值取上次输入和这次输入的最小，最大值取上次输入和这次输入的最大。并将此值（last_min_x_等）保存到此类中。
+updateCosts（）函数
+
+先找到障碍点，及cost=LETHAL_OBSTACLE的点，存入inflation_cells_映射。
+然后从这些点依次向外扩张（上下左右四个点），调用enqueue（）将扩张点放入inflation_cells_映射，并对扩张点按照距离查找cost值，设置master的cost。完成聚合。
+
