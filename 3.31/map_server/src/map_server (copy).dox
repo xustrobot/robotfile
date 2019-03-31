@@ -1,0 +1,130 @@
+/**
+
+@mainpage
+
+@htmlinclude manifest.html
+
+Command-line usage is in the wiki.
+ 概述
+
+   map_server提供map_server ROS节点，它提供地图数据作为一个ROS服务器。也提供map_saver命令行功能，能动态生成保存到文件中的地图。
+
+地图格式
+
+   包中通过工具操作的地图是以成堆的文件存储的。YAML文件描述地图的元数据，并命名image文件。Image文件编码占用数据。
+
+Image 格式
+
+Image 以对应单元的颜色描述世界中每个单元的占用状态。白色单元格表示自由，黑色单元格表示占用，两种颜色之间的单元表示未知。彩色和灰度图像都采用，但是大部分地图都是灰度图像(尽管它们存储的好像是以彩色的形式)。YAML文件的阈值划分为3类；阈值是在map_server内部完成的。
+
+比较阈值参数时，图像单元占用概率的计算如下：occ = (255 - color_avg) / 255.0， color_avg是从所有通道平均出来的8位值结果，例如如果图像时24位颜色，一个单元的颜色0x0a0a0a有一个0.96的概率，这是一个完全占用((255-(0*16+10))/255.0=0.96)。颜色0xeeeeee的概率是0.07((255-(14*16+14))/255.0=0.07),完全没占用。
+
+通过ROS消息通信时，占用表示为区间[0,100]的一个整数，0表示完全自由，100表示完全占用，特殊值-1表示完全未知。
+
+图像数据经由SDL_Image读取；依靠SDL_Image提供的一个特殊平台，支持格式改变。一般来说，大部分流行的图像格式都广泛支持。一个需要注意的例外是PNG在OS X上不支持。
+
+YAML格式
+
+YAML格式最好用一个简单而完全的例子来解释：
+
+[html] view plain copy
+ 
+
+    image: testmap.png  
+    resolution: 0.1  
+    origin: [0.0, 0.0, 0.0]  
+    occupied_thresh: 0.65  
+    free_thresh: 0.196  
+    negate: 0  
+
+
+
+必填的字节：
+
+image:   到包含占用信息的image文件的路径；可以是绝对路径，也可以是到YAML文件的相对路径。
+
+resolution：地图的分辨率，meters/pixel
+
+origin: 地图左下角单元(像素)的2维位姿，(x,y,yaw)，yaw逆时针旋转(yaw=0表示没有旋转)。系统的很多部分现在忽略yaw。
+
+occupied_thresh：单元占用的概率大于这个阈值则认为完全占用。
+
+free_thresh: 单元占用的概率小于这个阈值则认为完全自由。
+
+negate: 不论白色/黑色，自由/占用，semantics(语义/符号)应该被反转（阈值的解释不受影响）。
+
+命令行工具
+
+Map_server
+
+  Map_server是一个ROS节点，从磁盘读取一个地图，并通过ROS服务提供地图。
+
+Map_server的当前实现是转换地图图像数据中的色彩值为三元占用值：free(0), occupied(100), unknown(-1)。这个工具的未来版本是使用0到100之间的值来与占用的更精细层次交流。
+
+Usage
+
+[html] view plain copy
+ 
+
+    map_server <map.yaml>  
+
+
+Example
+
+[html] view plain copy
+ 
+
+    rosrun map_server map_server mymap.yaml  
+
+
+注意，地图数据可能通过任一个锁存话题(意味着只发送给每个订阅者一次)或者服务来检索。服务最终可能会被淘汰。
+
+发布话题
+
+map_metadata (nav_msgs/MapMetaData)
+
+     通过这个锁存话题来接受地图元数据(map metadata).
+
+map (nav_msgs/OccupancyGrid)
+
+    通过这个锁存话题接收地图。
+
+服务
+
+static_map (nav_msgs/GetMap)
+
+由该服务获取地图。
+
+参数
+
+~frame_id (string, default: "map")
+
+  设置在已发布地图的头(header)的坐标系。
+
+Map_saver
+
+Map_saver 保存地图到磁盘，例如从SLAM mapping 服务中保存。
+
+Usage
+
+map_saver [-f mapname]
+
+Map_saver获取地图数据，并把它写到map.pgm和map.yaml。使用-f选项为输出文件提供一个不同的base name(基础名字)。
+
+Example
+
+[html] view plain copy
+ 
+
+    rosrun map_server map_saver -f mymap  
+
+
+订阅话题
+
+map (nav_msgs/OccupancyGrid) 
+
+通过这个锁存话题获取地图。
+map_metadata (nav_msgs/MapMetaData)：接收地图的元数据
+map (nav_msgs/OccupancyGrid)：接受以地图
+*/
+
