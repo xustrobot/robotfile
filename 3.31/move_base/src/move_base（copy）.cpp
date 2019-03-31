@@ -51,12 +51,15 @@ namespace move_base {
     tf_(tf),
     as_(NULL),
     planner_costmap_ros_(NULL), controller_costmap_ros_(NULL),
+	//初始化全局路径规划算法
     bgp_loader_("nav_core", "nav_core::BaseGlobalPlanner"),
+	//初始化局部路径规划算法
     blp_loader_("nav_core", "nav_core::BaseLocalPlanner"), 
+	 //初始化recovery的方法
     recovery_loader_("nav_core", "nav_core::RecoveryBehavior"),
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
-
+//
     as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base", boost::bind(&MoveBase::executeCb, this, _1), false);
 
     ros::NodeHandle private_nh("~");
@@ -84,11 +87,12 @@ namespace move_base {
     latest_plan_ = new std::vector<geometry_msgs::PoseStamped>();
     controller_plan_ = new std::vector<geometry_msgs::PoseStamped>();
 
-    //set up the planner's thread 设置计划器的线程
+    //set up the planner's thread 设置计划器的线程 move_base只额外开启了一个线程，主要功能是做路径规划。主要程序运行在planThread()函数的一个while()死循环里。
     planner_thread_ = new boost::thread(boost::bind(&MoveBase::planThread, this));
 
-    //for commanding the base 指令 
+    //for commanding the base
     vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 1);
+    //pub了三个消息，/cmd_vel是路径规划出来的控制机器人运动的速度指令（给basecontroller）；/current_goal是一个中间变量；/goal是actionlib相关的topic。
     current_goal_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>("current_goal", 0 );
 
     ros::NodeHandle action_nh("move_base");
@@ -96,8 +100,12 @@ namespace move_base {
 
     //we'll provide a mechanism for some people to send goals as PoseStamped messages over a topic
     //they won't get any useful information back about its status, but this is useful for tools
-    //like nav_view and rviz 我们将为一些人提供一种机制，让他们将目标作为主题的已修复消息发送，这样他们就不会得到关于其状态的任何有用信息，但是这对于nav_view和rviz这样的工具非常有用
+    //like nav_view and rviz 我们将为一些人提供一种机制，
+    //让他们将目标作为主题的已修复消息发送，
+    //这样他们就不会得到关于其状态的任何有用信息，但是这对于nav_view和rviz这样的工具非常有用
     ros::NodeHandle simple_nh("move_base_simple");
+    //?????？？？？？？？???触发点？？？？？？？？？？？？？？？？？？？？？？？
+    //在构造函数内 move_base只sub了一个topic 即"/move_base_simple/goal，类型是"geometry_msgs/PoseStamped"。在rviz中"2D Nav Goal"点击下，可以产生一条这种消息。
     goal_sub_ = simple_nh.subscribe<geometry_msgs::PoseStamped>("goal", 1, boost::bind(&MoveBase::goalCB, this, _1));
 
     //we'll assume the radius of the robot to be consistent with what's specified for the costmaps 我们假设机器人的半径与成本图中指定的一致
@@ -127,7 +135,7 @@ namespace move_base {
     controller_costmap_ros_ = new costmap_2d::Costmap2DROS("local_costmap", tf_);
     controller_costmap_ros_->pause();
 
-    //create a local planner 创建一个本地计划
+    //create a local planner 创建一个局部规划
     try {
       tc_ = blp_loader_.createInstance(local_planner);
       ROS_INFO("Created local_planner %s", local_planner.c_str());
@@ -137,7 +145,7 @@ namespace move_base {
       exit(1);
     }
 
-    // Start actively updating costmaps based on sensor data 开始积极更新基于传感器数据的成本图
+    // Start actively updating costmaps based on sensor data 开始更新基于传感器数据的成本图
     planner_costmap_ros_->start();
     controller_costmap_ros_->start();
 
@@ -262,7 +270,9 @@ namespace move_base {
 
     last_config_ = config;
   }
-
+//该函数是/move_base_simple/goal 的回调函数，也是我们在rviz里戳一个目标点触发move_base模块工作的入口函数。
+  //这个函数很简单，只是入口，并不是实际执行的核心函数。它的做的事情是将传入的目标点坐标封装成actionlib的goal。
+  //真正的执行函数是在构造函数里actionlib server注册的executeCb()这个函数。
   void MoveBase::goalCB(const geometry_msgs::PoseStamped::ConstPtr& goal){
     ROS_DEBUG_NAMED("move_base","In ROS goal callback, wrapping the PoseStamped in the action message and re-sending to the server.");
     move_base_msgs::MoveBaseActionGoal action_goal;
@@ -326,7 +336,7 @@ namespace move_base {
 
     controller_costmap_ros_->getCostmap()->setConvexPolygonCost(clear_poly, costmap_2d::FREE_SPACE);
   }
-
+//提供清除一次costmap的功能
   bool MoveBase::clearCostmapsService(std_srvs::Empty::Request &req, std_srvs::Empty::Response &resp){
     //clear the costmaps 清除costmaps
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock_controller(*(controller_costmap_ros_->getCostmap()->getMutex()));
@@ -337,13 +347,13 @@ namespace move_base {
     return true;
   }
 
-
+//路径规划服务
   bool MoveBase::planService(nav_msgs::GetPlan::Request &req, nav_msgs::GetPlan::Response &resp){
     if(as_->isActive()){
       ROS_ERROR("move_base must be in an inactive state to make a plan for an external user");
       return false;
     }
-    //make sure we have a costmap for our planner 确保我们有一个成本计划
+    //make sure we have a costmap for our planner 确保我们有一个成本地图
     if(planner_costmap_ros_ == NULL){
       ROS_ERROR("move_base cannot make a plan for you because it doesn't have a costmap");
       return false;
@@ -365,10 +375,10 @@ namespace move_base {
         start = req.start;
     }
 
-    //update the copy of the costmap the planner uses 更新计划人员使用的成本图副本
+    //update the copy of the costmap the planner uses 更新规划器使用的成本图副本
     clearCostmapWindows(2 * clearing_radius_, 2 * clearing_radius_);
 
-    //first try to make a plan to the exact desired goal 首先，试着为确切的目标制定一个计划
+    //first try to make a plan to the exact desired goal 首先，试着为确切的目标制定一个路径规划
     std::vector<geometry_msgs::PoseStamped> global_plan;
     if(!planner_->makePlan(start, req.goal, global_plan) || global_plan.empty()){
       ROS_DEBUG_NAMED("move_base","Failed to find a plan to exact goal of (%.2f, %.2f), searching for a feasible goal within tolerance", 
@@ -457,7 +467,8 @@ namespace move_base {
     planner_.reset();
     tc_.reset();
   }
-
+// makePlan函数进行全局规划
+ //调用makePlan函数使全局路径规划器工作生成一条路径。得到路径之后，更改move_base状态机的状态变量，使状态机从PLANNING状态切换到CONTROLLING状态。如果在配置文件里设置需要不停规划路径，就调用createTimer设置一个定时器不停唤醒这个线程。
   bool MoveBase::makePlan(const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& plan){
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(planner_costmap_ros_->getCostmap()->getMutex()));
 
@@ -552,13 +563,16 @@ namespace move_base {
     // we have slept long enough for rate 停止等待
     planner_cond_.notify_one();
   }
-
+//路径规划
+//如果不需要规划的时候，planner_cond_.wait(lock)会使线程挂起，避免浪费。
+//唤醒状态下说明需要规划路径，调用makePlan函数使全局路径规划器工作生成一条路径。得到路径之后，更改move_base状态机的状态变量，使状态机从PLANNING状态切换到CONTROLLING状态。如果在配置文件里设置需要不停规划路径，就调用createTimer设置一个定时器不停唤醒这个线程。
   void MoveBase::planThread(){
     ROS_DEBUG_NAMED("move_base_plan_thread","Starting planner thread...");
     ros::NodeHandle n;
     ros::Timer timer;
     bool wait_for_wake = false;
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+    //里面先做了一个判断，判断actionlib是否收到抢占信号。如果收到抢占信号，且是一个新的导航点进来的话，那么原来的规划的路径肯定是无效了，所以需要重新唤醒planThread再规划一条路径。也就是上面五行代码在这个if里又执行了一遍。
     while(n.ok()){
       //check if we should run the planner (the mutex is locked) 检查是否应该运行计划器(互斥锁已锁定)
       while(wait_for_wake || !runPlanner_){
@@ -576,6 +590,8 @@ namespace move_base {
 
       //run planner 运行计划
       planner_plan_->clear();
+
+      //执行路径规划
       bool gotPlan = n.ok() && makePlan(temp_goal, *planner_plan_);
 
       if(gotPlan){
@@ -634,7 +650,14 @@ namespace move_base {
       }
     }
   }
-
+//进入函数首先对传入的坐标做了一些预处理，确认点的坐标是有效之后，执行下面的操作，
+// 唤醒另外一个线程(planThread)。目的是触发全局路径规划，先得到一条路径。
+//
+//首先调用tf将收到的目标变换到全局costmap下，
+//然后锁定规划器互斥体，设定规划目标、然后启动规划器（改变规划器条件变量runplanner为true使规划线程中的makeplan开始工作），
+//启动全局局部costmap，进入一个while循环。
+//while循环中：根据actionserver状态不断接受新目标，并转换到全局costmap下，锁住规划器互斥体，给定规划目标，并发布该目标;
+//判断全局costmap坐标系是否改变，并变换goalpose;执行executeCycle(goal, global_plan)。
   void MoveBase::executeCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal)
   {
     if(!isQuaternionValid(move_base_goal->target_pose.pose.orientation)){
@@ -668,6 +691,7 @@ namespace move_base {
     planning_retries_ = 0;
 
     ros::NodeHandle n;
+    //
     while(n.ok())
     {
       if(c_freq_change_)
@@ -752,7 +776,7 @@ namespace move_base {
       //for timing that gives real time even in simulation 用于计时，即使在模拟中也能提供实时时间
       ros::WallTime start = ros::WallTime::now();
 
-      //the real work on pursuing a goal is done here 追求目标的真正工作是在这里完成的
+      //the real work on pursuing a goal is done here 执行移动到目标的真正工作是在这里完成的
       bool done = executeCycle(goal, global_plan);
 
       //if we're done, then we'll return from execute 如果我们完成了，那么我们将从execute返回
@@ -785,7 +809,7 @@ namespace move_base {
   {
     return hypot(p1.pose.position.x - p2.pose.position.x, p1.pose.position.y - p2.pose.position.y);
   }
-
+//函数前面还是做了一堆预处理，略过了。比较重要的是这个if里，如果判断得到一个新路径，就调用tc->setPlan()函数传给局部路径规划器。setPlan函数的实现在base_local_planner文件夹下的local_planner_util.cpp里。
   bool MoveBase::executeCycle(geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& global_plan){
     boost::recursive_mutex::scoped_lock ecl(configuration_mutex_);
     //we need to be able to publish velocity commands 我们需要能够发布velocity命令
@@ -834,7 +858,7 @@ namespace move_base {
       latest_plan_ = temp_plan;
       lock.unlock();
       ROS_DEBUG_NAMED("move_base","pointers swapped!");
-
+//tc->setPlan()函数传给局部路径规划器。setPlan函数的实现在base_local_planner文件夹下的local_planner_util.cpp里。
       if(!tc_->setPlan(*controller_plan_)){
         //ABORT and SHUTDOWN COSTMAPS 中止和关闭成本图
         ROS_ERROR("Failed to pass global plan to the controller, aborting.");
@@ -853,7 +877,7 @@ namespace move_base {
       if(recovery_trigger_ == PLANNING_R) 
         recovery_index_ = 0;
     }
-
+//进入move_base的状态机。一共有三个状态：PLANNING、CONTROLLING、CLEARING。 PLANNING状态即规划状态，会把runPlanner_置为true，继续通知planThread干活。
     //the move_base state machine, handles the control logic for navigationmove_base状态机处理导航的控制逻辑
     switch(state_){
       //if we are in a planning state, then we'll attempt to make a plan 如果我们处于计划状态，那么我们会尝试制定一个计划
@@ -866,7 +890,10 @@ namespace move_base {
         ROS_DEBUG_NAMED("move_base","Waiting for plan, in the planning state.");
         break;
 
-      //if we're controlling, we'll attempt to find valid velocity commands 如果我们在控制，我们将尝试找到有效的速度命令
+        //if we're controlling, we'll attempt to find valid velocity commands  如果我们在控制，我们将尝试找到有效的速度命令
+        //CONTROLLING状态即控制状态。每次先查询是否到达终点，到达终点就runPlanner_置为false，同时给actionlib返回success。如果没到终点的话，
+        //就调用computeVelocityCommands继续让局部路径规划器工作，生成速度指令，控制底盘移动。
+
       case CONTROLLING:
         ROS_DEBUG_NAMED("move_base","In controlling state.");
 
@@ -875,7 +902,7 @@ namespace move_base {
           ROS_DEBUG_NAMED("move_base","Goal reached!");
           resetState();
 
-          //disable the planner thread 禁用规划器线程
+          //disable the planner thread 如果到达目标禁用规划器线程
           boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
           runPlanner_ = false;
           lock.unlock();
@@ -895,13 +922,13 @@ namespace move_base {
         
         {
          boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(controller_costmap_ros_->getCostmap()->getMutex()));
-        
+        //如果没到终点的话，就调用computeVelocityCommands继续让局部路径规划器工作，生成速度指令，控制底盘移动。
         if(tc_->computeVelocityCommands(cmd_vel)){
           ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
                            cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
           last_valid_control_ = ros::Time::now();
-          //make sure that we send the velocity command to the base 确保我们把速度命令发送到基地
-          vel_pub_.publish(cmd_vel);
+          //make sure that we send the velocity command to the base 确保我们把速度命令发送到底盘
+          .publish(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)
             recovery_index_ = 0;
         }
@@ -935,6 +962,7 @@ namespace move_base {
         break;
 
       //we'll try to clear out space with any user-provided recovery behaviors 我们将尝试使用任何用户提供的恢复行为来清除空间
+        //CLEARING状态是用来出发recovery的。会根据我们之前导入的plugin，执行一些动作。比如清除costmap、原地转圈什么的。
       case CLEARING:
         ROS_DEBUG_NAMED("move_base","In clearing/recovery state");
         //we'll invoke whatever recovery behavior we're currently on if they're enabled 如果启用了当前的恢复行为，我们将调用它们

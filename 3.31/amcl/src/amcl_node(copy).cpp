@@ -136,6 +136,7 @@ class AmclNode
 
     /**
      * @brief Uses TF and LaserScan messages from bag file to drive AMCL instead
+     * 定义使用来自包文件的tf和laserscan消息来驱动amcl
      */
     void runFromBag(const std::string &in_bag_fn);
 
@@ -153,7 +154,7 @@ class AmclNode
     bool latest_tf_valid_;
 
     // Pose-generating function used to uniformly distribute particles over
-    // the map
+    // the map 位姿生成函数，用于均匀分布粒子在地图上
     static pf_vector_t uniformPoseGenerator(void* arg);
 #if NEW_UNIFORM_SAMPLING
     static std::vector<std::pair<int,int> > free_space_indices;
@@ -241,14 +242,17 @@ class AmclNode
     //time for tolerance on the published transform,
     //basically defines how long a map->odom transform is good for
     ros::Duration transform_tolerance_;
-
+   //定义节点处理句柄
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
-    ros::Publisher pose_pub_;
-    ros::Publisher particlecloud_pub_;
+    //定义发布句柄
+    ros::Publisher pose_pub_;//
+    ros::Publisher particlecloud_pub_;//粒子位姿的数组
+    //定义服务句柄
     ros::ServiceServer global_loc_srv_;
     ros::ServiceServer nomotion_update_srv_; //to let amcl update samples without requiring motion
     ros::ServiceServer set_map_srv_;
+    //定义订阅句柄
     ros::Subscriber initial_pose_sub_old_;
     ros::Subscriber map_sub_;
 
@@ -300,7 +304,7 @@ void sigintHandler(int sig)
   amcl_node_ptr->savePoseToServer();
   ros::shutdown();
 }
-
+//主函数 入口
 int
 main(int argc, char** argv)
 {
@@ -329,7 +333,7 @@ main(int argc, char** argv)
   // To quote Morgan, Hooray!
   return(0);
 }
-
+//构造函数
 AmclNode::AmclNode() :
         sent_first_transform_(false),
         latest_tf_valid_(false),
@@ -645,7 +649,7 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
   initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
 }
 
-
+//使用来自包文件的tf和laserscan消息来驱动amcl
 void AmclNode::runFromBag(const std::string &in_bag_fn)
 {
   rosbag::Bag bag;
@@ -657,14 +661,15 @@ void AmclNode::runFromBag(const std::string &in_bag_fn)
   rosbag::View view(bag, rosbag::TopicQuery(topics));
 
   ros::Publisher laser_pub = nh_.advertise<sensor_msgs::LaserScan>(scan_topic_name, 100);
+  //Publishes the transform from odom to map.
   ros::Publisher tf_pub = nh_.advertise<tf2_msgs::TFMessage>("/tf", 100);
 
-  // Sleep for a second to let all subscribers connect
+  // Sleep for a second to let all subscribers connect 休眠一秒钟以让所有订阅建立连接
   ros::WallDuration(1.0).sleep();
 
   ros::WallTime start(ros::WallTime::now());
 
-  // Wait for map
+  // Wait for map 等待接收地图
   while (ros::ok())
   {
     {
@@ -686,10 +691,15 @@ void AmclNode::runFromBag(const std::string &in_bag_fn)
       break;
     }
 
-    // Process any ros messages or callbacks at this point
+    // Process any ros messages or callbacks at this point 此时处理任何ROS消息或回调
     ros::getGlobalCallbackQueue()->callAvailable(ros::WallDuration());
 
     tf2_msgs::TFMessage::ConstPtr tf_msg = msg.instantiate<tf2_msgs::TFMessage>();
+    /*
+     * 如果tf消息不为空
+     * 则将tf发布出去
+     * 并将tf消息设置到转换器
+     * */
     if (tf_msg != NULL)
     {
       tf_pub.publish(msg);
@@ -699,6 +709,11 @@ void AmclNode::runFromBag(const std::string &in_bag_fn)
       }
       continue;
     }
+/*
+ * 如果激光雷达的消息不为空
+ * 则将激光雷达的消息发布出去
+ * 并把激光雷达的数据添加到机光雷达过滤器
+ * */
 
     sensor_msgs::LaserScan::ConstPtr base_scan = msg.instantiate<sensor_msgs::LaserScan>();
     if (base_scan != NULL)
@@ -732,7 +747,7 @@ void AmclNode::runFromBag(const std::string &in_bag_fn)
   ros::shutdown();
 }
 
-
+//保存姿态服务器
 void AmclNode::savePoseToServer()
 {
   // We need to apply the last transform to the latest odom pose to get
@@ -756,7 +771,7 @@ void AmclNode::savePoseToServer()
   private_nh_.setParam("initial_cov_aa", 
                                   last_published_pose.pose.covariance[6*5+5]);
 }
-
+//更新位姿服务
 void AmclNode::updatePoseFromServer()
 {
   init_pose_[0] = 0.0;
@@ -798,7 +813,7 @@ void AmclNode::updatePoseFromServer()
   else
     ROS_WARN("ignoring NAN in initial covariance AA");	
 }
-
+//检查激光接收数据
 void 
 AmclNode::checkLaserReceived(const ros::TimerEvent& event)
 {
@@ -810,7 +825,7 @@ AmclNode::checkLaserReceived(const ros::TimerEvent& event)
              ros::names::resolve(scan_topic_).c_str());
   }
 }
-
+//请求形式的接收   地图
 void
 AmclNode::requestMap()
 {
@@ -820,6 +835,7 @@ AmclNode::requestMap()
   nav_msgs::GetMap::Request  req;
   nav_msgs::GetMap::Response resp;
   ROS_INFO("Requesting the map...");
+  //从costmap节点请求static_map提供map 调用handleMapMessage处理地图信息 类型是Nav_mesg::OccupancyGride
   while(!ros::service::call("static_map", req, resp))
   {
     ROS_WARN("Request for map failed; trying again...");
@@ -828,7 +844,7 @@ AmclNode::requestMap()
   }
   handleMapMessage( resp.map );
 }
-
+//订阅形式（构造函数中）的回调函数   接收地图
 void
 AmclNode::mapReceived(const nav_msgs::OccupancyGridConstPtr& msg)
 {
@@ -840,7 +856,7 @@ AmclNode::mapReceived(const nav_msgs::OccupancyGridConstPtr& msg)
 
   first_map_received_ = true;
 }
-
+//以上两个都调用 处理地图消息
 void
 AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid& msg)
 {
@@ -928,7 +944,7 @@ AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid& msg)
   applyInitialPose();
 
 }
-
+//释放地图内存
 void
 AmclNode::freeMapDependentMemory()
 {
@@ -948,7 +964,7 @@ AmclNode::freeMapDependentMemory()
 
 /**
  * Convert an OccupancyGrid map message into the internal
- * representation.  This allocates a map_t and returns it.
+ * representation.  This allocates a map_t and returns it.将占用网格地图信息转换为内部表示。这将分配一个映射并返回它。
  */
 map_t*
 AmclNode::convertMap( const nav_msgs::OccupancyGrid& map_msg )
@@ -976,7 +992,7 @@ AmclNode::convertMap( const nav_msgs::OccupancyGrid& map_msg )
 
   return map;
 }
-
+//析构函数
 AmclNode::~AmclNode()
 {
   delete dsrv_;
@@ -985,7 +1001,7 @@ AmclNode::~AmclNode()
   delete laser_scan_sub_;
   // TODO: delete everything allocated in constructor
 }
-
+//得到里程计位子
 bool
 AmclNode::getOdomPose(geometry_msgs::PoseStamped& odom_pose,
                       double& x, double& y, double& yaw,
@@ -1012,7 +1028,7 @@ AmclNode::getOdomPose(geometry_msgs::PoseStamped& odom_pose,
   return true;
 }
 
-
+//位姿生成函数，用于均匀分布粒子在地图上
 pf_vector_t
 AmclNode::uniformPoseGenerator(void* arg)
 {
@@ -1050,7 +1066,7 @@ AmclNode::uniformPoseGenerator(void* arg)
 #endif
   return p;
 }
-
+//启动全局定位 ， 其中所有颗粒的随机分散的空闲空间的地图。
 bool
 AmclNode::globalLocalizationCallback(std_srvs::Empty::Request& req,
                                      std_srvs::Empty::Response& res)
