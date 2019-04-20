@@ -1,0 +1,13 @@
+<!--
+  The turtlebot people (or whatever) follower nodelet.
+ -->
+<launch>
+    <include file="$(find turtlebot_bringup)/launch/minimal.launch">
+ </include>
+    <include file="$(find turtlebot_navigation)/launch/includes/3dsensor/kinect2/kinect2_cpu.launch">
+ </include>
+    <include file="$(find turtlebot_navigation)/launch/amcl/kinect2_amcl_demo.launch">
+  <arg name="map_file" default="/home/nvidia/map/map.yaml"/>
+<node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+ </include>
+</launch>

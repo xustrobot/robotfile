@@ -1,0 +1,8 @@
+prefix=/home/admin1/Desktop/turtlebot/turtlebot/devel
+
+Name: turtlebot_bringup
+Description: Description of turtlebot_bringup
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/admin1/Desktop/turtlebot/turtlebot/devel/lib 
+Requires: 

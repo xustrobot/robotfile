@@ -1,0 +1,2 @@
+turtlebot_navigation
+-DCATKIN_DEVEL_PREFIX=/home/admin1/Desktop/turtlebot/devel -DCMAKE_INSTALL_PREFIX=/home/admin1/Desktop/turtlebot/install -G Unix Makefiles

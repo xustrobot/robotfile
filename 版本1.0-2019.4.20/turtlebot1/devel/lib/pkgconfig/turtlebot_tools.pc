@@ -1,0 +1,8 @@
+prefix=/home/admin1/Desktop/turtlebot/devel
+
+Name: turtlebot_tools
+Description: Description of turtlebot_tools
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/admin1/Desktop/turtlebot/devel/lib 
+Requires: 

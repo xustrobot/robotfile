@@ -1,0 +1,8 @@
+prefix=/home/admin1/Desktop/turtlebot/devel
+
+Name: turtlebot_navigation
+Description: Description of turtlebot_navigation
+Version: 2.3.7
+Cflags: 
+Libs: -L/home/admin1/Desktop/turtlebot/devel/lib 
+Requires: tf roscpp sensor_msgs

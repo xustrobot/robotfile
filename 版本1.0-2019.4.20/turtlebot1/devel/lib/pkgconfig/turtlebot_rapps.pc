@@ -1,0 +1,8 @@
+prefix=/home/admin1/Desktop/turtlebot/turtlebot/devel
+
+Name: turtlebot_rapps
+Description: Description of turtlebot_rapps
+Version: 2.3.7
+Cflags: 
+Libs: -L/home/admin1/Desktop/turtlebot/turtlebot/devel/lib 
+Requires: 

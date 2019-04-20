@@ -1,0 +1,8 @@
+prefix=/home/admin1/Desktop/turtlebot/devel
+
+Name: turtlebot_arm
+Description: Description of turtlebot_arm
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/admin1/Desktop/turtlebot/devel/lib 
+Requires: 

@@ -1,0 +1,8 @@
+prefix=/home/admin1/Desktop/turtlebot/devel
+
+Name: turtlebot_stage
+Description: Description of turtlebot_stage
+Version: 2.2.3
+Cflags: 
+Libs: -L/home/admin1/Desktop/turtlebot/devel/lib 
+Requires: 
