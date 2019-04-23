@@ -1,7 +1,7 @@
-﻿1 运行框架
-（1）类体系
+Costmap2D
+1 运行框架
 
-（2）Costmap2DROS运行框架
+（1）Costmap2DROS运行框架
 Cosmap2DROS主要作为一个地图模块存在，内部会启动一个地图更新循环，同时提供给外部管理地图循环、获取地图信息的接口。
 其主要接口如下：
 void start()---启动地图运行，内部包括激活各层、启动地图更新循环。可以在stop或者pause调用之后用于重新启动地图
@@ -21,95 +21,61 @@ std::vector<geometry_msgs::Point>getUnpaddedRobotFootprint()---获取机器人�
 void getOrientedFootprint(std::vector<geometry_msgs::Point>& oriented_footprint) const---获取机器人边界（在地图全局坐标系下，包含padding）
 void setUnpaddedRobotFootprint(const std::vector<geometry_msgs::Point>& points)---设置机器人边界
 void setUnpaddedRobotFootprintPolygon(const geometry_msgs::Polygon& footprint)---设置机器人边界
- 
 在Costmap2DROS的构造函数中，加载参数，创建各层，做好初始化工作后，启动动态配置。
 在动态配置回调函数中会根据参数对地图进行调整，另外还会重新启动地图更新线程mapUpdateLoop（因此，地图更新线程在这里启动）。
 在地图更新线程中，会先通过updateMap函数更新地图，然后根据地图更新的范围边界，通过Costmap2DPublisher发布更新的地图信息。最后，会根据update_frequency，判断该地图更新循环的周期有没有满足要求，不满足则给出警告日志。
 updateMap函数是地图信息更新的地方，其内部调用了LayeredCostmap->updateMap(double robot_x, double robot_y, double robot_yaw)函数。在该函数中，先依据各层的更新情况，判断地图更新过的范围的边界。然后用初始值重置全局地图更新边界范围内的地图信息，并用各层的信息在更新边界内部更新地图信息。
- 
 2 mark和clear
 clear和mark操作的执行都在ObstacleLayer中的updateBounds函数中，且必须有点云的存在才会触发clear和mark。
- 
 （1）观察缓冲区
 首先, clear和mark操作存在于ObstacleLayer中，其实现是基于观察缓冲区。在ObstacleLayer中存在三个缓冲区数组，用于存放三类缓冲区：观察缓冲区、mark缓冲区、clear缓冲区。
 其中，一个缓冲区（ObservationBuffer）对应一个观察源，用于存放观察源的数据。而ObservationBuffer可以认为是List<Observation>，而Observation可以认为是点云数据。由于可以记录一段时间内的观察数据，所以OservationBuffer以列表的形式存储观察数据，但默认观察时间（observation_keep_time）为0，因此其实ObservationBuffer只存最新的一组点云（Observation）。
 在配置文件中所列出的观察源都会列入观察缓冲区，但是mark缓冲区和clear缓冲区则根据源内参数决定是否加入该源。由于三类缓冲区存放的都是vector<shared_ptr>，因此内存是同一块。
- 
 LaserScan、PointCloud、PointCloud2数据到来后会在回调函数里都转为PointCloud2类型，然后由对应的ObservationBuffer存储，Observation会存储相对于costmap global坐标系的传感器原点信息、点云信息（包含时间戳、坐标系等信息）、obstacle_range、raytrace_range信息。
- 
 （2）clear操作
 clear操作是在costmap global坐标系下的二维平面内，根据clear缓冲区中的各个Observation，将各个Observation的传感器原点和点云之间（用bresenham算法画直线）的地图信息设为FREE_SPACE（距离不超过raytrace_range）。
- 
 （3）mark操作
 mark操作也比较简单，依次获取mark缓冲区的各个Observation，并计算Observation中点云与传感器原点之间的距离，如果距离不超过obstacle_range，则将点云对应坐标的地图信息设为LETHAL_OBSTACLE。
- 
 注：由于mark和clear使用的是同一块Observation数据，因此有时出现边界点标记但是清除不掉的现象，这估计就是边界通过画线的方式进行clear操作时会偶尔覆盖不到一些像素。解决这个问题的思路是将clear的扇形范围取的比mark的范围大一些（针对LaserScan这种扇形数据而言），从而保证边界的清除效果。由于mark和clear使用同一块数据，因此比较难以单独改变范围。可以采用的一个思路是修改clear部分的代码，在利用点云画直线清除时，加粗直线。另一种是，自己创建节点订阅激光数据，并发布一个角度范围小的LaserScan数据，同时在ObstacleLayer中增加一个源，然原始激光对应的源只clear，变换后的激光对应的源只mark。
- 
 3 地图更新
 地图信息的更新并不是每次都更新整幅地图，而是先根据各层的变化情况，计算出所要更新的边界，然后用各层去更新该边界内的区域。
 （1）更新总流程
-
-
 首先，在Costmap2DROS的动态配置回调函数中启动了地图更新循环，且地图更新循环可以由start stop pause resume等函数控制，且地图更新循环的频率由updtae_frequency参数进行监视。
 对于静态层，在reset函数中，会调用onInitialize函数重新进行初始化，但基本不进行特别的操作，只是将地图更新标志位设为true，从而引起边界的更新（最大地图边界），从而导致后面更新地图时更新整个地图。
- 
 对于障碍物层，在reset函数中，会先取消订阅传感器话题，然后复位地图，然后在重新订阅传感器话题，从而保证整个层从新开始。
 原文出处：https://www.cnblogs.com/sakabatou/p/8297736.html
- 
 对于膨胀层，在reset函数中，会调用onInitialize函数进行重新初始化，但其实并没有特别的地图信息操作，只是复位一些标记。
 在地图更新循环中，先通过updateMap()函数更新地图信息，然后再由Costmap2DPublisher的publishCostmap()函数把地图更新过的部分发布出去。
 对于costmap来说，最内部的数据类型为Costmap2D，其内部通过unsigned char* costmap_来保存最基本的地图数据。
- 
 首先总体层次结构为：Costmap2DROS内部保存的地图相关对象为LayeredCostmap，而LayeredCostmap内部有一个Costmap2D用来保存总的地图信息，另外它还包括了层信息std::vector<boost::shared_ptr<Layer>> plugins（层的类型可以是StaticLayer、ObstacleLayer、InflationLayer）。LayeredCostmap最终会将各层的信息汇总到其内部的Costmap2D中。
- 
 LayeredCostmap中的Costmap2D在初始化构造时采用了默认构造函数，将地图尺寸、分辨率、原点信息、地图数据都设置为0或者NULL。然后，LayeredCostmap根据传入进来的在Costmap2DROS中捕获到track_unkown_space参数先给其内部的总地图Costmap2D设置地图数据缺省值NO_INFORMATION或者FREE_SPACE。
 StaticLayer继承自Layer和Costmap2D（其它两层相同），因此相当于通过Costmap2D保存地图信息。StaticLayer在构造时调用默认构造函数，因此Costmap2D也通过默认构造函数进行了设置。在静态层的onInitialize函数中，获取到了在该层作用域中的track_unkown_space和unknown_cost_value两个参数，这两个参数不是用来设置Costmap2D中地图数据的缺省值的，而是用来在接收到地图数据后解析地图中的未知区域信息（值等于unknown_cost_value）的，根据track_unknown_space的值不同，将订阅到的地图信息中的unknown_cost_value转化为NO_INFORMATION或者FREE_SPACE。由于静态层的数据会完全被订阅的地图信息赋值，因此缺省值对其来说不重要（保持默认构造为0）。
 ObtacleLayer的构造及初始化方式和StaticLayer类似。在该层的OnInitialize函数中，获取到了在该层作用域中的track_unknown_space参数，然后根据该参数对其继承自Costmap2D的default_value_参数赋值为NO_INFORMATION或者FREE_SPACE。
 InflationLayer的构造及初始化方法和StaticLayer类似。该层是基于已有地图进行膨胀，因此不需要有缺省值。
- 
 （2）信息融合
 地图各层会有自己的更新机制，例如静态地图根据map话题更新自己的数据（也可以设置成只更新一次），动态地图则根据激光数据更新地图，膨胀层不会更新地图，只是对已有地图进行膨胀。在总地图（即Costmap2DROS->LayeredCostmap->Costmap2D）更新时，是将重置过的总地图依次传入各层，利用各层的数据进行更新。默认情况下，静态层会用自己的信息覆盖传入的总地图信息；障碍物层会用自己的信息和传入的总地图信息进行比对，然后取最大值（NO_INFORMATION虽然为255，但不参与比较直接略过）；膨胀层则对传入的总地图信息执行膨胀操作。因此各层的放置顺序不能随意颠倒。
- 
 5 地图有效性-current
 对于各层，都有current_参数，该参数继承自Layer类，且通过Layer::isCurrent查询。总的地图的current是通过各层current的与操作计算出来的。
- 
 对于静态层，只要初始化（onInitialize）完成后current_就一直为true
- 
 对于障碍物层，其current_参数是各个观察缓冲区（ObservationBuffer）是否current的与操作，而ObservationBuffer的current取决于缓冲区更新时间（新的观测数据到来的时间）与expected_update_rate参数的对比。
 
 对于膨胀层，也是只要初始化完成后curretn_就一直为true
- 
 6 地图重置
 在Costmap2DROS中，可以通过resetLayers函数对地图进行重置。
 在该函数中，首先将总的地图信息重置为缺省值。然后调用各层的reset函数对各层进行重置。
- 
 
 在updateMap()函数中，先获取机器人当前位姿，然后调用了LayeredCostmap->updateMap(double robot_x, double robot_y, double robot_yaw)函数更新地图，并在该函数的最后将机器人在地图全局坐标系下边界发布出去。
 在LayeredCostmap->updateMap(double robot_x, double robot_y, double robot_yaw)函数中，如果地图时rolling的，则先更新原点信息。然后，根据各层的更新情况确定地图更新范围的边界。然后，将更新范围内的地图信息重置为缺省值。接着，调用各层的updateCosts函数用各层的信息去更新更新范围内的地图信息。
- 
 （2）各层更新边界
 边界信息在LayeredCostmap->updateMap(double robot_x, double robot_y, double robot_yaw)创建，并传给各层进行更新（调用各层的updateBounds）。
- 
 对于静态层，如果是非rolling地图，则看是否有地图数据更新（初始化后会在接收到map话题后有一次更新），如果没有则不更新边界，否则，根据静态层更新的区域的边界更新传入的边界。
 对于障碍物层，主要是根据mark和clear操作的范围更新出入的地图边界信息（在该层的updateBounds函数中会进行clear和mark操作）。
 对于膨胀层，基本是在传入的地图边界信息的基础上在扩大一个膨胀半径更新地图边界信息。
- 
 （3）各层更新地图
 对于静态层，其内部的自身更新主要是通过订阅话题的信息进行的。由于一般是通过map_server提供静态地图信息，因此一般只会发布一次地图信息，也就是说静态一般只会更新一次，即初始化的时候。
 另外，也可选择定于map_topic_update形式的话题，从而动态更新静态层（目前暂未使用）。
 在updateCosts函数中，默认情况下，静态层会用自己的信息覆盖传入的总地图信息。另外，可以选择最大值更新机制（通过use_maximum参数）。
- 
 对于障碍物层，其内部的自身更新主要是通过传感器话题的回调函数缓存观察源数据Observation，然后在updateBounds中根据观察缓冲区执行mark和clear操作，从而实现地图层的更新。
 在updateCosts函数中，默认情况下，障碍物层会用自己的信息和传入的总地图信息进行比对，然后取最大值（NO_INFORMATION虽然为255，但不参与比较直接略过）。另外，可以选择覆盖更新机制（通过combination_method参数）。
- 
 对于膨胀层，只是对已有的地图进行膨胀，因此其内部不会进行自身层更新。
 在updateCosts函数中，该层对更新范围内的地图信息进行膨胀操作，即在LETHA_OBSTACLE信息的像素周围进行膨胀。
- 
-4 存储信息
-NO_INFORMATION = 255
-LETHAL_OBSTACLE = 254
-INSCRIBED_INFLATED_OBSTACLE = 253
-FREE_SPACE = 0
- 
-（1）缺省值
-
